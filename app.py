@@ -7,8 +7,10 @@ from sb_gen_ai.sb_gen_ai_stack import SbGenAiStack
 from sb_gen_ai.pipeline_stack import PipelineStack
 
 app = cdk.App()
+"""
 SbGenAiStack(app, "SbGenAiStack",
              env=cdk.Environment(account='058264396254', region='us-east-1'))
+"""
 
 PipelineStack(app, "PipelineStack",
               env=cdk.Environment(account='058264396254', region='us-east-1'))
