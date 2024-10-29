@@ -57,7 +57,6 @@ class PipelineStack(Stack):
                     }
                 },
                 "artifacts": {
-                    "base-directory": "cdk.out",
                     "files": "**/*"
                 }
             }),
