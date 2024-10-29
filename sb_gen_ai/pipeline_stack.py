@@ -48,9 +48,11 @@ class PipelineStack(Stack):
                     "build": {
                         "commands": [
                             "git diff HEAD^ HEAD > code_diff.txt",
-                            "cdk synth",
+                            "cdk synth PipelineStack > pipeline_stack.txt",
+                            "cdk synth SbGenAiStack > sbgenai_stack.txt",
                             "aws s3 cp code_diff.txt s3://${ARTIFACT_BUCKET}/code_diff_${CODEBUILD_BUILD_NUMBER}.txt",
-                            "aws s3 cp cdk.out s3://${ARTIFACT_BUCKET}/synth_${CODEBUILD_BUILD_NUMBER} --recursive"
+                            "aws s3 cp pipeline_stack.txt s3://${ARTIFACT_BUCKET}/pipeline_stack_${CODEBUILD_BUILD_NUMBER}.txt"
+                            "aws s3 cp sbgenai_stack.txt s3://${ARTIFACT_BUCKET}/sbgenai_stack_${CODEBUILD_BUILD_NUMBER}.txt"
                         ]
                     }
                 },
