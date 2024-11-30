@@ -1,0 +1,23 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+      nodejs: 16
+    commands:
+      - npm install -g aws-cdk
+      - pip install -r requirements.txt
+  build:
+    commands:
+      - git diff HEAD^ HEAD > code_diff.txt
+      - cdk synth PipelineStack > pipeline_stack.yaml
+      - cdk synth SbGenAiStack > sbgenai_stack.yaml
+      - aws s3 cp code_diff.txt s3://${ARTIFACT_BUCKET}/code_diff_${CODEBUILD_BUILD_NUMBER}.txt
+      - aws s3 cp pipeline_stack.yaml s3://${ARTIFACT_BUCKET}/pipeline_stack_${CODEBUILD_BUILD_NUMBER}.yaml
+      - aws s3 cp sbgenai_stack.yaml s3://${ARTIFACT_BUCKET}/sbgenai_stack_${CODEBUILD_BUILD_NUMBER}.yaml
+      - cdk synth
+artifacts:
+  files:
+    - code_diff.txt
+    - pipeline_stack.yaml
+    - sbgenai_stack.yaml

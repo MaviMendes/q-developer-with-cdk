@@ -3,6 +3,7 @@ from aws_cdk import (
     Stack,
     SecretValue,
     aws_s3 as s3,
+    aws_codebuild as codebuild,
     pipelines
 )
 from constructs import Construct
@@ -27,30 +28,25 @@ class PipelineStack(Stack):
             authentication=SecretValue.secrets_manager("github-token"),
         )
 
-        # Define the pipeline with modified synth step
+        # Create a custom synth step that uses the buildspec file
+        synth = pipelines.CodeBuildStep(
+            "Synth",
+            input=source,
+            env={
+                "ARTIFACT_BUCKET": artifact_bucket.bucket_name
+            },
+            build_environment=codebuild.BuildEnvironment(
+                build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
+                privileged=True
+            ),
+            partial_build_spec=codebuild.BuildSpec.from_source_filename('buildspec.yml'),
+            commands=[]  # Commands are now in buildspec.yml
+        )
+
+        # Define the pipeline
         pipeline = pipelines.CodePipeline(
             self, "Pipeline",
-            synth=pipelines.ShellStep(
-                "Synth",
-                input=source,
-                env={
-                    "ARTIFACT_BUCKET": artifact_bucket.bucket_name
-                },
-                commands=[
-                    "npm install -g aws-cdk",
-                    "pip install -r requirements.txt",
-                    "git diff HEAD^ HEAD > code_diff.txt",
-                    "cdk synth PipelineStack > pipeline_stack.yaml",
-                    "cdk synth SbGenAiStack > sbgenai_stack.yaml",
-                    f"aws s3 cp code_diff.txt s3://{artifact_bucket.bucket_name}/code_diff_$CODEBUILD_BUILD_NUMBER.txt",
-                    f"aws s3 cp pipeline_stack.yaml s3://{artifact_bucket.bucket_name}/pipeline_stack_$CODEBUILD_BUILD_NUMBER.yaml",
-                    f"aws s3 cp sbgenai_stack.yaml s3://{artifact_bucket.bucket_name}/sbgenai_stack_$CODEBUILD_BUILD_NUMBER.yaml",
-                    "cdk synth"
-                ],
-                # Change this to use the current directory instead of cdk.out
-                primary_output_directory="."
-            ),
-            # Add this to override the default artifact configuration
+            synth=synth,
             pipeline_name=f"{id}-pipeline",
             cross_account_keys=False
         )
@@ -62,7 +58,7 @@ class PipelineStack(Stack):
         deploy_stage.add_pre(pipelines.ManualApprovalStep("ApproveDeployment"))
 
         # Grant S3 permissions to the pipeline's role
-        artifact_bucket.grant_read_write(pipeline.synth_step.build_step.project)
+        artifact_bucket.grant_read_write(pipeline.synth_step.project)
 
 
 class DeployStage(cdk.Stage):
