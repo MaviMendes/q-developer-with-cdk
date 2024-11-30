@@ -32,41 +32,46 @@ class PipelineStack(Stack):
 
         # Create a CodeBuild project to run synth and save differences
         synth_project = codebuild.PipelineProject(
-            self, "SynthProject",
-            build_spec=codebuild.BuildSpec.from_object({
-                "version": "0.2",
-                "phases": {
-                    "install": {
-                        "runtime-versions": {
-                            "python": "3.9"
-                        },
-                        "commands": [
-                            "npm install -g aws-cdk",
-                            "python -m pip install -r requirements.txt"
-                        ]
+        self, "SynthProject",
+        build_spec=codebuild.BuildSpec.from_object({
+            "version": "0.2",
+            "phases": {
+                "install": {
+                    "runtime-versions": {
+                        "python": "3.9"
                     },
-                    "build": {
-                        "commands": [
-                            "git diff HEAD^ HEAD > code_diff.txt",
-                            "cdk synth PipelineStack > pipeline_stack.txt",
-                            "cdk synth SbGenAiStack > sbgenai_stack.txt",
-                            "aws s3 cp code_diff.txt s3://${ARTIFACT_BUCKET}/code_diff_${CODEBUILD_BUILD_NUMBER}.txt",
-                            "aws s3 cp pipeline_stack.txt s3://${ARTIFACT_BUCKET}/pipeline_stack_${CODEBUILD_BUILD_NUMBER}.txt"
-                            "aws s3 cp sbgenai_stack.txt s3://${ARTIFACT_BUCKET}/sbgenai_stack_${CODEBUILD_BUILD_NUMBER}.txt"
-                        ]
-                    }
+                    "commands": [
+                        "npm install -g aws-cdk",
+                        "python -m pip install -r requirements.txt"
+                    ]
                 },
-                "artifacts": {
-                    "files": "**/*"
+                "build": {
+                    "commands": [
+                        "git diff HEAD^ HEAD > code_diff.txt",
+                        "cdk synth PipelineStack > pipeline_stack.yaml",
+                        "cdk synth SbGenAiStack > sbgenai_stack.yaml",
+                        "aws s3 cp code_diff.txt s3://${ARTIFACT_BUCKET}/code_diff_${CODEBUILD_BUILD_NUMBER}.txt",
+                        "aws s3 cp pipeline_stack.yaml s3://${ARTIFACT_BUCKET}/pipeline_stack_${CODEBUILD_BUILD_NUMBER}.yaml",
+                        "aws s3 cp sbgenai_stack.yaml s3://${ARTIFACT_BUCKET}/sbgenai_stack_${CODEBUILD_BUILD_NUMBER}.yaml"
+                    ]
                 }
-            }),
-            environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_5_0
-            ),
-            environment_variables={
-        "ARTIFACT_BUCKET": codebuild.BuildEnvironmentVariable(value=artifact_bucket.bucket_name)
-    }
-        )
+            },
+            "artifacts": {
+                "files": [
+                    "code_diff.txt",
+                    "pipeline_stack.yaml",
+                    "sbgenai_stack.yaml"
+                ]
+            }
+        }),
+        environment=codebuild.BuildEnvironment(
+            build_image=codebuild.LinuxBuildImage.STANDARD_5_0
+        ),
+        environment_variables={
+            "ARTIFACT_BUCKET": codebuild.BuildEnvironmentVariable(value=artifact_bucket.bucket_name)
+        }
+    )
+
 
         # Grant permissions to the CodeBuild project to access the S3 bucket
         artifact_bucket.grant_read_write(synth_project)
