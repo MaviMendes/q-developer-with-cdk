@@ -3,11 +3,8 @@ from aws_cdk import (
     Stack,
     SecretValue,
     aws_s3 as s3,
-    aws_codebuild as codebuild,
-    aws_iam as iam,
     pipelines
 )
-from aws_cdk.pipelines import CodePipeline, CodePipelineSource, ShellStep
 from constructs import Construct
 from sb_gen_ai.sb_gen_ai_stack import SbGenAiStack
 
@@ -30,62 +27,25 @@ class PipelineStack(Stack):
             authentication=SecretValue.secrets_manager("github-token"),
         )
 
-        # Create a CodeBuild project to run synth and save differences
-        synth_project = codebuild.PipelineProject(
-        self, "SynthProject",
-        build_spec=codebuild.BuildSpec.from_object({
-            "version": "0.2",
-            "phases": {
-                "install": {
-                    "runtime-versions": {
-                        "python": "3.9"
-                    },
-                    "commands": [
-                        "npm install -g aws-cdk",
-                        "python -m pip install -r requirements.txt"
-                    ]
-                },
-                "build": {
-                    "commands": [
-                        "git diff HEAD^ HEAD > code_diff.txt",
-                        "cdk synth PipelineStack > pipeline_stack.yaml",
-                        "cdk synth SbGenAiStack > sbgenai_stack.yaml",
-                        "aws s3 cp code_diff.txt s3://${ARTIFACT_BUCKET}/code_diff_${CODEBUILD_BUILD_NUMBER}.txt",
-                        "aws s3 cp pipeline_stack.yaml s3://${ARTIFACT_BUCKET}/pipeline_stack_${CODEBUILD_BUILD_NUMBER}.yaml",
-                        "aws s3 cp sbgenai_stack.yaml s3://${ARTIFACT_BUCKET}/sbgenai_stack_${CODEBUILD_BUILD_NUMBER}.yaml"
-                    ]
-                }
-            },
-            "artifacts": {
-                "files": [
-                    "code_diff.txt",
-                    "pipeline_stack.yaml",
-                    "sbgenai_stack.yaml"
-                ]
-            }
-        }),
-        environment=codebuild.BuildEnvironment(
-            build_image=codebuild.LinuxBuildImage.STANDARD_5_0
-        ),
-        environment_variables={
-            "ARTIFACT_BUCKET": codebuild.BuildEnvironmentVariable(value=artifact_bucket.bucket_name)
-        }
-    )
-
-
-        # Grant permissions to the CodeBuild project to access the S3 bucket
-        artifact_bucket.grant_read_write(synth_project)
-    
-
-        # Define the pipeline
-        pipeline = CodePipeline(
+        # Define the pipeline with modified synth step
+        pipeline = pipelines.CodePipeline(
             self, "Pipeline",
-            synth=ShellStep("Synth", 
+            synth=pipelines.ShellStep(
+                "Synth",
                 input=source,
+                env={
+                    "ARTIFACT_BUCKET": artifact_bucket.bucket_name
+                },
                 commands=[
-                    "npm install -g aws-cdk",  # Install CDK CLI
-                    "pip install -r requirements.txt",  # Install Python dependencies
-                    "cdk synth",  # Synthesize the CDK app
+                    "npm install -g aws-cdk",
+                    "pip install -r requirements.txt",
+                    "git diff HEAD^ HEAD > code_diff.txt",
+                    "cdk synth PipelineStack > pipeline_stack.yaml",
+                    "cdk synth SbGenAiStack > sbgenai_stack.yaml",
+                    f"aws s3 cp code_diff.txt s3://{artifact_bucket.bucket_name}/code_diff_$CODEBUILD_BUILD_NUMBER.txt",
+                    f"aws s3 cp pipeline_stack.yaml s3://{artifact_bucket.bucket_name}/pipeline_stack_$CODEBUILD_BUILD_NUMBER.yaml",
+                    f"aws s3 cp sbgenai_stack.yaml s3://{artifact_bucket.bucket_name}/sbgenai_stack_$CODEBUILD_BUILD_NUMBER.yaml",
+                    "cdk synth"  # This final synth is required for the pipeline
                 ],
                 primary_output_directory="cdk.out"
             )
@@ -95,14 +55,13 @@ class PipelineStack(Stack):
         deploy_stage = pipeline.add_stage(DeployStage(self, "Deploy"))
 
         # Optionally, add manual approval before deployment
-        deploy_stage.add_pre(cdk.pipelines.ManualApprovalStep("ApproveDeployment"))
+        deploy_stage.add_pre(pipelines.ManualApprovalStep("ApproveDeployment"))
 
+        # Grant S3 permissions to the pipeline's role
+        artifact_bucket.grant_read_write(pipeline.synth_step.build_step.project)
 
 
 class DeployStage(cdk.Stage):
     def __init__(self, scope: Construct, id: str, **kwargs):
         super().__init__(scope, id, **kwargs)
-
         SbGenAiStack(self, "SbGenAiStack")
-
-
