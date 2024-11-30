@@ -45,10 +45,14 @@ class PipelineStack(Stack):
                     f"aws s3 cp code_diff.txt s3://{artifact_bucket.bucket_name}/code_diff_$CODEBUILD_BUILD_NUMBER.txt",
                     f"aws s3 cp pipeline_stack.yaml s3://{artifact_bucket.bucket_name}/pipeline_stack_$CODEBUILD_BUILD_NUMBER.yaml",
                     f"aws s3 cp sbgenai_stack.yaml s3://{artifact_bucket.bucket_name}/sbgenai_stack_$CODEBUILD_BUILD_NUMBER.yaml",
-                    "cdk synth"  # This final synth is required for the pipeline
+                    "cdk synth"
                 ],
-                primary_output_directory="cdk.out"
-            )
+                # Change this to use the current directory instead of cdk.out
+                primary_output_directory="."
+            ),
+            # Add this to override the default artifact configuration
+            pipeline_name=f"{id}-pipeline",
+            cross_account_keys=False
         )
 
         # Add stages to the pipeline
